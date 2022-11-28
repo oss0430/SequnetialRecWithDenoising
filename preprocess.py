@@ -1,17 +1,15 @@
-import os
 import sys
-import random
 import gzip
-import json
 import pandas as pd
-import numpy as np
 from collections import defaultdict
-from datetime import datetime
+
+input_path = sys.argv[1]
+output_path = sys.argv[2]
 
 class PreProcessorAmazonReview():
     def __init__(
         self,
-        data = pd.DataFrame(),
+        dataframe = pd.DataFrame(),
         user_map = {},
         item_map = {},
         user_count = {},
@@ -24,7 +22,7 @@ class PreProcessorAmazonReview():
         user_count = dictionary of {user-id (original-user-id) : integer-value-of-user-frequency}
         item_count = dictionary of {item-id (original-user-id) : integer-value-of-itme-frequency}
         """
-        self.data = data
+        self.dataframe = dataframe
         self.user_map = user_map
         self.item_map = item_map
         self.user_count = user_count
@@ -48,7 +46,10 @@ class PreProcessorAmazonReview():
             df[i] = d
         i += 1
         
-        self.data = pd.DataFrame.from_dict(df, orient = 'index')
+        self.dataframe = pd.DataFrame.from_dict(df, orient = 'index')
+    
+    def _dataframe_to_dict(self):
+        self.data_dict = self.dataframe.to_dict(orient = "index")
 
     def _count(self):
         countU = defaultdict(lambda: 0)
@@ -115,10 +116,23 @@ class PreProcessorAmazonReview():
 
     def preprocess(
         self,
-        use_pre_loaded_map = False
+        use_pre_loaded_map = False,
+        to_dataframe = True
     ):
         self._dataframe_to_dict()
         self._count()
         preprocessed_data = self._clean_dataset(use_pre_loaded_map)
 
-        return preprocessed_data
+        if to_dataframe :
+            return pd.DataFrame(preprocessed_data)
+        else :
+            return preprocessed_data
+
+def main(input_path, output_path):
+    ourPreProcessorAmazonReview = PreProcessorAmazonReview()
+    ourPreProcessorAmazonReview.parse_from_path(input_path)
+    print(ourPreProcessorAmazonReview.dataframe.head(10))
+
+    df_preproessed_data = ourPreProcessorAmazonReview.preprocess(use_pre_loaded_map = False, to_dataframe= True)
+    print(df_preproessed_data.head(10))
+    df_preproessed_data.to_csv(output_path)
