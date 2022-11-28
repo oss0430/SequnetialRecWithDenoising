@@ -5,23 +5,7 @@ import copy
 from torch.utils.data import DataLoader, Dataset
 from collections import defaultdict
 
-"""
-    Mask filling example:
-    ```python
-    from transformers import BartTokenizer, BartForConditionalGeneration
-    tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
-    model = BartForConditionalGeneration.from_pretrained("facebook/bart-base")
-    TXT = "My friends are <mask> but they eat too many carbs."
-    input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-    logits = model(input_ids).logits
-    print(logits.shape) ## [1, 13, 50265]
-    masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-    probs = logits[0, masked_index].softmax(dim=0)
-    values, predictions = probs.topk(5)
-    tokenizer.decode(predictions).split()
-    ['not', 'good', 'healthy', 'great', 'very']
-    ```
-"""
+
 class SeqRecDataset(Dataset):
     def __init__(
         self, 
@@ -36,8 +20,6 @@ class SeqRecDataset(Dataset):
         self.is_train      = is_train
         self.for_testing   = for_testing
 
-        
-        
         final_idx = -1
         if for_testing:
             final_idx = -1
@@ -60,9 +42,6 @@ class SeqRecDataset(Dataset):
         testing for validation
             Sequence = [1] - [2] - [3] - [4]
         """
-
-
-
         sequences = {}
         """
         sequences = {   1 :{
@@ -74,7 +53,6 @@ class SeqRecDataset(Dataset):
                             "sequence": [12, 15, 188, 13, 250]
                         } 
                     }
-        
         """
         usernum = 0
         itemnum = 0
@@ -103,8 +81,10 @@ class SeqRecDataset(Dataset):
         self.item_mask_index = itemnum + 1
         self.max_len = max_len
 
+
     def __len__(self):
         return len(self.data)
+
 
     def _sequence_noising(
         self,
@@ -140,6 +120,7 @@ class SeqRecDataset(Dataset):
         new_sequence = [self.padding_idx] * self.max_len + sequence
         return new_sequence[len(new_sequence)-self.max_len:len(new_sequence)]
 
+
     def _sample_from_training_set_by_index(
         self,
         index
@@ -166,6 +147,7 @@ class SeqRecDataset(Dataset):
 
         return user_id, input_sequence, positive_sequence, negative_sequence
 
+
     def __getitem__(
         self, 
         index
@@ -188,8 +170,10 @@ class SeqRecDataset(Dataset):
             'negative_ids'   : negative_ids.to(dtype = torch.long)
         }
 
-class SeqRecTrainer():
 
+class SeqRecTrainer():
+    ## TODO:
+    ## Implement Metrics Class
     def __init__(
         self,
         dataset,

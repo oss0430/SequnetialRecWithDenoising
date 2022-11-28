@@ -7,6 +7,7 @@ input_file_path = sys.argv[1]
 output_file_path = sys.argv[2]
 true = True
 false = False
+
 class PreProcessorAmazonReview():
     def __init__(
         self,

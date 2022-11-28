@@ -19,7 +19,6 @@ def train(
     for _,data in enumerate(loader, 0):
         #optimizer.zero_grad()
         
-        
         user_ids     = data['user_id']
         input_ids    = data['input_ids']
         positive_ids = data['positive_ids'] 
@@ -27,6 +26,25 @@ def train(
         
         print(user_ids, input_ids, positive_ids, negative_ids)
         
+        ##TODO:
+        ## ADD Model updating
+        """
+        Mask filling example:
+        ```python
+        from transformers import BartTokenizer, BartForConditionalGeneration
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-base")
+        TXT = "My friends are <mask> but they eat too many carbs."
+        input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
+        logits = model(input_ids).logits
+        print(logits.shape) ## [1, 13, 50265]
+        masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        probs = logits[0, masked_index].softmax(dim=0)
+        values, predictions = probs.topk(5)
+        tokenizer.decode(predictions).split()
+        ['not', 'good', 'healthy', 'great', 'very']
+        ```
+        """
         #outputs = model(input_ids = ids, attention_mask = mask, labels=y)
         
         #loss = outputs[0]
@@ -38,7 +56,29 @@ def train(
         #total_len += len(labels)
         #loss.backward()
         #optimizer.step()
+
+
+def valid(
+    epoch,
+    model,
+    device,
+    loader
+):  
+    #model.eval()
+    for _,data in enumerate(loader, 0):
+        #optimizer.zero_grad()
         
+        user_ids     = data['user_id']
+        input_ids    = data['input_ids']
+        positive_ids = data['positive_ids'] 
+        negative_ids = data['negative_ids'] 
+        
+        print(user_ids, input_ids, positive_ids, negative_ids)
+
+        ##TODO:
+        ## ADD Model validation
+        
+
 def main():
     wandb.init(project="BART SeqRec results")
     
@@ -50,8 +90,7 @@ def main():
     config.LEARNING_RATE = 4.00e-05 # learning rate (default: 0.01)
     config.SEED = 420               # random seed (default: 42)
     config.MAX_LEN = 512
-    
-    
+
     train_params = {
         'batch_size': config.TRAIN_BATCH_SIZE,
         'shuffle': False,
@@ -83,6 +122,7 @@ def main():
 
     #for epoch in range(config.VAL_EPOCHS):
     #    train(None,None,None,test_for_testing_set_loader,None)
+
 
 if __name__ == '__main__':
     main()
