@@ -3,9 +3,10 @@ import gzip
 import pandas as pd
 from collections import defaultdict
 
-input_path = sys.argv[1]
-output_path = sys.argv[2]
-
+input_file_path = sys.argv[1]
+output_file_path = sys.argv[2]
+true = True
+false = False
 class PreProcessorAmazonReview():
     def __init__(
         self,
@@ -44,7 +45,7 @@ class PreProcessorAmazonReview():
         df = {}
         for d in self._parse(path):
             df[i] = d
-        i += 1
+            i += 1
         
         self.dataframe = pd.DataFrame.from_dict(df, orient = 'index')
     
@@ -113,7 +114,6 @@ class PreProcessorAmazonReview():
         
         return clean_dataset
 
-
     def preprocess(
         self,
         use_pre_loaded_map = False,
@@ -122,6 +122,7 @@ class PreProcessorAmazonReview():
         self._dataframe_to_dict()
         self._count()
         preprocessed_data = self._clean_dataset(use_pre_loaded_map)
+        #print(preprocessed_data)
 
         if to_dataframe :
             return pd.DataFrame(preprocessed_data)
@@ -131,8 +132,18 @@ class PreProcessorAmazonReview():
 def main(input_path, output_path):
     ourPreProcessorAmazonReview = PreProcessorAmazonReview()
     ourPreProcessorAmazonReview.parse_from_path(input_path)
+    print("Unprocessed")
     print(ourPreProcessorAmazonReview.dataframe.head(10))
 
     df_preproessed_data = ourPreProcessorAmazonReview.preprocess(use_pre_loaded_map = False, to_dataframe= True)
+    print("Processed")
+    print(df_preproessed_data.head(10))
+    
+    print("Ordered")
+    df_preproessed_data = df_preproessed_data.sort_values(['user_id', 'time'], ascending=[True, True], ignore_index=True)
     print(df_preproessed_data.head(10))
     df_preproessed_data.to_csv(output_path)
+
+    
+if __name__ == '__main__':
+    main(input_file_path, output_file_path)
