@@ -1,31 +1,35 @@
 import torch
 import numpy as np
-from transformers import BartEncoder, BartDecoder
+from transformers import BartForConditionalGeneration
 
-
-class RecwithSequenceDenosingEmbeddingLayer(torch.nn.Module):
-    def __init__(
-        self,
-        user_number,
-        item_number,
-        embedding_size
-    ):
-        self.user_embedding = torch.nn.Embedding(num_embeddings = user_number, embedding_dim=embedding_size)
-        self.item_embedding = torch.nn.Embedding(num_embeddings = item_number, embedding_dim=embedding_size)
-
+class BARTforSeqRec(torch.nn.Module):
+    def __init__(self, BARTforSeqRecConfig):
+        super(BARTforSeqRec, self).__init__()
+        self.config = BARTforSeqRecConfig
+        self.BartForConditionalGeneration = BartForConditionalGeneration(BARTforSeqRecConfig)
+        self.mask_token_id = BARTforSeqRecConfig.mask_token_id
+    
     def forward(
         self,
         user_ids,
-        item_ids
+        seqs,
+        pos_seqs,
+        neg_seqs = None
     ):
-        ##
-        sequence = np.zeros(12)
-        return sequence
-
-class RecWithSequenceDenoising(torch.nn.Module):
-    def __init__(
-        self
+        return self.BartForConditionalGeneration.forward(input_ids = seqs, labels = pos_seqs) 
+    
+    def predict(
+        self,
+        user_ids,
+        seqs,
+        candidate_items = None,
+        top_N = 10
     ):
-        self.encoder = BartEncoder
-        self.decoder = BartDecoder
+        logits = self.BartForConditionalGeneration(seqs).logits
 
+        masked_index = (seqs[0] == self.mask_token_id).nonzero().item()
+        probs = logits[0, masked_index].softmax(dim=0)
+
+        values, predictions = probs.topk(top_N)
+
+        return values, predictions
