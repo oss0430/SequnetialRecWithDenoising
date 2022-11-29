@@ -56,6 +56,10 @@ def valid(
 ):  
     model.eval()
     
+    ht   = np.array([0.0])
+    ndcg = np.array([0.0])
+    user_numbers = len(loader)
+
     for _,data in enumerate(loader, 0):
         #optimizer.zero_grad()
         
@@ -63,13 +67,24 @@ def valid(
         input_ids    = data['input_ids'].to(device)
         positive_ids = data['positive_ids'].to(device)
         negative_ids = data['negative_ids'].to(device)
+        target_item  = data['target_item'].to(device)
         
         values, predictions = model.predict(user_ids, input_ids, candidate_items = None, top_N = 10)
-        print(values, predictions)
-
-        ##TODO:
-        ## ADD Model validation
         
+        rank = (predictions == target_item).nonzero(as_tuple=True)[0].to(torch.device("cpu")).numpy()
+        if len(rank) > 0:
+            #print(predictions, target_item, rank)
+            ht += 1
+            ndcg += np.log2(rank + 2)
+        else :
+            #print(predictions, target_item, rank)
+            ht += 0
+            ndcg += 0
+    
+    ht = ht / user_numbers
+    ndcg = ndcg / user_numbers
+    print("ht :" ,ht, " ndcg : ", ndcg)
+    return ht, ndcg
 
 def main():
     device = 'cuda' if cuda.is_available() else 'cpu'
@@ -90,6 +105,7 @@ def main():
         'num_workers': 0
         }
 
+    ## Validation Batch size must be 1
     val_params = {
         'batch_size': config.VALID_BATCH_SIZE,
         'shuffle': False,
@@ -120,6 +136,10 @@ def main():
     ## itemnum + 3 : eos_token (not used)
     item_embedding_size = itemnum + 4
 
+    ## TODO:
+    ## Need to Match Parameters Number
+    ## Currently layer numbers are 12 for encoder 16 for decoder
+    ## While BERT4Recs are 2 layer
     modelConfig = BARTforSeqRecConfig(vocab_size = item_embedding_size, pad_token_id=0, bos_token_id= itemnum + 2, eos_token_id= + 3, mask_token_id= itemnum + 1, max_position_embeddings= config.MAX_LEN)
     model = BARTforSeqRec(modelConfig)
     model.to(device)
@@ -130,8 +150,11 @@ def main():
         train(epoch + 1, model, device, train_for_testing_set_loader, optimizer)
 
     for epoch in range(config.VAL_EPOCHS):
-        valid(epoch + 1, model, device, test_for_testing_set_loader)
+        hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_set_loader)
 
+    ## TODO:
+    ##  Add saving model parameters functions 
+    ##  Add saving result functions
 
 if __name__ == '__main__':
     main()

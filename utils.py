@@ -83,7 +83,7 @@ class SeqRecDataset(Dataset):
 
 
     def __len__(self):
-        return len(self.data)
+        return len(self.sequences)
 
 
     def _sequence_noising(
@@ -140,19 +140,20 @@ class SeqRecDataset(Dataset):
 
         user_id = single_data["user_id"]
         input_sequence    = single_data["sequence"][:-1]
+        target_item       = single_data["sequence"][-1]
         positive_sequence = single_data["sequence"]
         negative_sequence = []
         for _ in positive_sequence:
             negative_sequence.append(self._random_neq(1, self.itemnum, ts))
 
-        return user_id, input_sequence, positive_sequence, negative_sequence
+        return user_id, input_sequence, positive_sequence, negative_sequence, target_item
 
 
     def __getitem__(
         self, 
         index
     ):
-        user_id, input_sequence, positive_sequence, negative_sequence = self._sample_from_training_set_by_index(index)
+        user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
         
         ## Add mask at the end of input sequence 
         input_sequence.append(self.item_mask_index)
@@ -162,18 +163,20 @@ class SeqRecDataset(Dataset):
         input_ids       = torch.tensor(self._pad_and_trunc_by_max_len(input_sequence))
         positive_ids    = torch.tensor(self._pad_and_trunc_by_max_len(positive_sequence))
         negative_ids    = torch.tensor(self._pad_and_trunc_by_max_len(negative_sequence))
-
+        target_item     = torch.tensor([target_item])
         return {
             'user_id'        : user_id.to(dtype = torch.long),
             'input_ids'      : input_ids.to(dtype = torch.long),
             'positive_ids'   : positive_ids.to(dtype = torch.long),
-            'negative_ids'   : negative_ids.to(dtype = torch.long)
+            'negative_ids'   : negative_ids.to(dtype = torch.long),
+            'target_item'    : target_item.to(dtype = torch.long)
         }
 
 
 class SeqRecTrainer():
     ## TODO:
     ## Implement Metrics Class
+    ## Currently unused
     def __init__(
         self,
         dataset,
@@ -184,7 +187,8 @@ class SeqRecTrainer():
 
     def _ht(
         self,
-        predictions
+        predictions,
+        target_item
     ):
         ht = 0.0
         rank = predictions.argsort().argsort()[0].item()
@@ -224,28 +228,3 @@ class SeqRecTrainer():
             "ht"   : self._ht(num_candidate)
         }
 
-    def _sample_from_training_set_by_index(
-        self,
-        index
-    ):  
-        ## Training Sequence will be used to train the model for sequencial recommendation
-        ## if training sequence for user 1
-        ## [1] - [3] - [4] - [8] - [11]
-        ## model will predict [11] from
-        ## [1] - [3] - [4] - [8]
-        
-        ## input_sequence    = [1] - [3] - [4] - [8]
-        ## positive_sequence = [1] - [3] - [4] - [8] - [11]
-        ## negative_sequence = [77] - [123] - [2534] - [22] - [52]
-        
-        single_data = self.dataset.sequence_train[index]
-        ts = set(single_data[index]["sequence"])
-
-        user_id = single_data["user_id"]
-        input_sequence    = single_data["sequence"][:-1]
-        positive_sequence = single_data["sequence"]
-        negative_sequence = []
-        for _ in positive_sequence:
-            negative_sequence.append(self._random_neq(1, self.dataset.itemnum, ts))
-
-        return user_id, input_sequence, positive_sequence, negative_sequence
