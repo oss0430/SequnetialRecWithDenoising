@@ -99,6 +99,11 @@ def main():
     config.SEED = 420               # random seed (default: 42)
     config.MAX_LEN = 50
 
+    config.HIDDEN_DIM = [16, 32, 64, 128, 256, 512, 1024]  # hiddem dimension size (default: 1024)
+    config.LAYER_NUM = 2                                   # number of layers (default: 12)
+    config.HEAD_NUM = 2                                    # number of attention heads for each attention layer (default: 16)
+    config.FFN_DIM = 32                                    # the dimensionality of each head (default: 4096)
+
     train_params = {
         'batch_size': config.TRAIN_BATCH_SIZE,
         'shuffle': False,
@@ -140,7 +145,11 @@ def main():
     ## Need to Match Parameters Number
     ## Currently layer numbers are 12 for encoder 16 for decoder
     ## While BERT4Recs are 2 layer
-    modelConfig = BARTforSeqRecConfig(vocab_size = item_embedding_size, pad_token_id=0, bos_token_id= itemnum + 2, eos_token_id= + 3, mask_token_id= itemnum + 1, max_position_embeddings= config.MAX_LEN)
+    modelConfig = BARTforSeqRecConfig(vocab_size = item_embedding_size, \
+        pad_token_id=0, bos_token_id= itemnum + 2, eos_token_id= + 3, mask_token_id= itemnum + 1, \
+            d_model = config.HIDDEN_DIM[0], encoder_layers = config.LAYER_NUM, decoder_layers = config.LAYER_NUM, \
+                encoder_attention_heads = config.HEAD_NUM, decoder_attention_heads = config.HEAD_NUM, decoder_ffn_dim = config.FFN_DIM, \
+                    encoder_ffn_dim = config.FFN_DIM, max_position_embeddings= config.MAX_LEN)
     model = BARTforSeqRec(modelConfig)
     model.to(device)
 
