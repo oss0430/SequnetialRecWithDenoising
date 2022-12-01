@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from transformers import BartForConditionalGeneration
-
+import pdb
 class BARTforSeqRec(torch.nn.Module):
     def __init__(self, BARTforSeqRecConfig):
         super(BARTforSeqRec, self).__init__()
@@ -11,12 +11,16 @@ class BARTforSeqRec(torch.nn.Module):
     
     def forward(
         self,
-        user_ids,
-        seqs,
-        pos_seqs,
-        neg_seqs = None
+        input_ids = None,
+        decoder_ids = None,
+        labels = None,
+        neg_seqs = None,
+        user_ids = None
     ):
-        return self.BartForConditionalGeneration.forward(input_ids = seqs, labels = pos_seqs) 
+        pdb.set_trace()
+        return self.BartForConditionalGeneration.forward(input_ids = input_ids,
+                decoder_input_ids = decoder_ids,
+                labels = labels) 
     
     def predict(
         self,
