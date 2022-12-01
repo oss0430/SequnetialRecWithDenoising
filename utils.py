@@ -5,6 +5,14 @@ import copy
 from torch.utils.data import DataLoader, Dataset
 from collections import defaultdict
 
+from make_noising import (
+    filter_example,
+    make_train_examples,
+    sentence_permutation,
+    slice_example,
+    text_infilling
+)
+
 
 class SeqRecDataset(Dataset):
     def __init__(
@@ -88,11 +96,21 @@ class SeqRecDataset(Dataset):
 
     def _sequence_noising(
         self,
-        ids
+        input_ids,
+        mask_token_id,
+        permutation_segment_token_id
     ):  
         ##TODO
         ## MAKE NOISING Function
-        noised_ids = ids
+
+        # Apply Noise Functions
+        masking_rate = 0.3
+        text_infilling_fn = text_infilling(mask_token_id, masking_rate)
+
+
+
+
+        noised_ids = input_ids
         return noised_ids
 
     
