@@ -46,6 +46,7 @@ def train(
         if _%500==0:
             print(f'Epoch: {epoch}, Loss:  {loss.item()}')
 
+    return loss.item()
 
 
 def valid(
@@ -155,11 +156,33 @@ def main():
 
     optimizer = torch.optim.Adam(params =  model.parameters(), lr=config.LEARNING_RATE)
 
+    best_train_loss = 1000
+    best_valid_ht, best_valid_ndcg = 0.0, 0.0
+
     for epoch in range(config.TRAIN_EPOCHS):
-        train(epoch + 1, model, device, train_for_testing_set_loader, optimizer)
+        train_loss = train(epoch + 1, model, device, train_for_testing_set_loader, optimizer)
+
+        # Save the best training model
+        if train_loss < best_train_loss:
+            best_train_loss = train_loss
+            best_epoch = epoch
+            torch.save(model.state_dict(), 'trained_models/model.pt')
 
     for epoch in range(config.VAL_EPOCHS):
+        model.load_state_dict(torch.load('trained_models/model.pt'))
         hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_set_loader)
+
+        # Save the model validation results
+        if hitratio > best_valid_ht and ndcg > best_valid_ndcg:
+            best_valid_ht = hitratio
+            best_valid_ndcg = ndcg
+        
+        wandb.log({"Best Valid HitRatio": best_valid_ht, "Best Valid NDCG": best_valid_ndcg})
+    
+    print("=======================================")
+    print("Best Model Result")
+    print("Epoch: {best_epoch}, Loss: {best_train_loss}, HitRatio: {best_valid_ht}, NDCG: {best_valid_ndcg}")
+    print("=======================================")
 
     ## TODO:
     ##  Add saving model parameters functions 
