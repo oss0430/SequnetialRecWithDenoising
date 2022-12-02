@@ -21,7 +21,7 @@ def train(
     optimizer
 ):
     model.train()
-    
+    total_loss = 0
     for _,data in enumerate(loader, 0):
 
         #  user_ids     = data['user_id'].to(device) #user_id
@@ -41,14 +41,15 @@ def train(
         #correct = pred.eq(y)
         #total_correct += correct.sum().item()
         #total_len += len(labels)
-
+        total_loss += loss.item()
         if _%10 == 0:
             wandb.log({"Training Loss": loss.item()})
         
         if _%500==0:
             print(f'Epoch: {epoch}, Loss:  {loss.item()}')
 
-
+    print(f"Epoch: {epoch}, Loss: {(total_loss / _)}")
+    return total_loss / _
 
 def valid(
     epoch,
@@ -65,15 +66,14 @@ def valid(
     for _,data in enumerate(loader, 0):
         #optimizer.zero_grad()
         
-        #  user_ids     = data['user_id'].to(device)
-        input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long)
-        decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long)
-        labels       = torch.tensor(data['labels']).to(device, dtype = torch.long)
+        user_ids     = data['user_id'].to(device)
+        input_ids    = data['input_ids'].to(device)
+        #  decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long)
         #  positive_ids = data['positive_ids'].to(device)
         #  negative_ids = data['negative_ids'].to(device)
-        #  target_item  = data['target_item'].to(device)
+        target_item  = data['target_item'].to(device)
         
-        values, predictions = model.predict(user_ids, input_ids, candidate_items = None, top_N = 10)
+        values, predictions = model.predict(input_ids = input_ids, candidate_items = None, top_N = 10)
         
         rank = (predictions == target_item).nonzero(as_tuple=True)[0].to(torch.device("cpu")).numpy()
         if len(rank) > 0:
@@ -95,13 +95,13 @@ def main():
     wandb.init(project="BART SeqRec results")
     
     config = wandb.config           # Initialize config
-    config.TRAIN_BATCH_SIZE = 2    # input batch size for training (default: 64)
+    config.TRAIN_BATCH_SIZE = 16    # input batch size for training (default: 64)
     config.VALID_BATCH_SIZE = 1     # input batch size for testing (default: 1)
     config.TRAIN_EPOCHS =  1        # number of epochs to train (default: 10)
     config.VAL_EPOCHS = 1  
     config.LEARNING_RATE = 4.00e-05 # learning rate (default: 0.01)
     config.SEED = 420               # random seed (default: 42)
-    config.MAX_LEN = 64
+    config.MAX_LEN = 384
 
     config.HIDDEN_DIM = [16, 32, 64, 128, 256, 512, 1024]  # hiddem dimension size (default: 1024)
     config.LAYER_NUM = 2                                   # number of layers (default: 12)
@@ -162,12 +162,32 @@ def main():
 
     optimizer = torch.optim.Adam(params =  model.parameters(), lr=config.LEARNING_RATE)
 
+    best_train_loss = 1000
+    best_valid_ht, best_valid_ndcg = 0.0, 0.0
+
     for epoch in range(config.TRAIN_EPOCHS):
-        train(epoch + 1, model, device, train_for_testing_set_loader, optimizer)
+        train_loss = train(epoch + 1, model, device, train_for_testing_set_loader, optimizer)
+
+        if train_loss < best_train_loss:
+            best_train_loss = train_loss
+            best_epoch = epoch
+            torch.save(model.state_dict(), 'trained_models/model.pt')
 
     for epoch in range(config.VAL_EPOCHS):
         hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_set_loader)
 
+        if hitratio > best_valid_ht and ndcg > best_valid_ndcg:
+            best_valid_ht = hitratio
+            best_valid_ndcg = ndcg
+
+        wandb.log({"Best Valid HitRatio": best_valid_ht, "Best Valid NDCG": best_valid_ndcg})
+    
+    print("=======================================")
+    print("Best Model Result")
+    print("Epoch: {best_epoch}, Loss: {best_train_loss}, HitRatio: {best_valid_ht}, NDCG: {best_valid_ndcg}")
+    print("=======================================")
+    
+    
     ## TODO:
     ##  Add saving model parameters functions 
     ##  Add saving result functions

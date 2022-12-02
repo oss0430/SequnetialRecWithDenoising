@@ -18,10 +18,8 @@ class SeqRecDataset(Dataset):
         dataframe, 
         is_train = True,
         for_testing = True,
-        max_len = 64
+        max_len = 384
     ):
-        self.poisson_lambda = 0.3 
-        self.mask_ratio = 0.3
         self.data          = dataframe
         self.review_user   = dataframe['user_id']
         self.review_item   = dataframe['item_id']
@@ -125,8 +123,9 @@ class SeqRecDataset(Dataset):
     ):
         ## sequence = [1] - [2] - [3]
         ## max_len  = 5
-        ## return   = [0] - [0] - [1] - [2] - [3]  
+        ## return   = [0] - [0] - [1] - [2] - [3] 
         new_sequence =[self.bos_idx] + sequence + [self.eos_idx] + [self.padding_idx] * (self.max_len - len(sequence) - 2)
+
         return new_sequence[:self.max_len]
 
 
@@ -166,6 +165,9 @@ class SeqRecDataset(Dataset):
         
         ## Add mask at the end of input sequence 
         input_sequence.append(self.item_mask_index)
+        if len(input_sequence) > self.max_len:
+            pdb.set_trace()
+
         user_id         = np.array([user_id])
         input_ids       = np.array(self._pad_and_trunc_by_max_len(input_sequence))
         positive_ids    = np.array(self._pad_and_trunc_by_max_len(positive_sequence))
@@ -248,7 +250,7 @@ class DataCollatorForDenoisingTasks:
     
     mask_ratio: float = 0.5
     poisson_lambda: float = 3.0
-    permutate_sentence_ratio: float = 1.0
+    permutate_sentence_ratio: float = 0.0
     eos_token_id : int = 57289 + 3
     bos_token_id : int = 57289 + 2
     pad_token_id : int = 0
@@ -265,7 +267,6 @@ class DataCollatorForDenoisingTasks:
         batch = dict()
         batch['user_ids'] = np.stack([i['input_ids'] for i in examples], axis = 0)
         batch['input_ids'] = np.stack([i['input_ids'] for i in examples], axis = 0)
-        print("before : ",batch['input_ids'].shape)
         batch["decoder_input_ids"] = self.shift_tokens_right(batch["input_ids"])
         do_permutate = False
         if self.permutate_sentence_ratio > 0.0:
@@ -275,8 +276,6 @@ class DataCollatorForDenoisingTasks:
 
         if self.mask_ratio:
             batch["input_ids"], batch["labels"] = self.add_whole_word_mask(batch["input_ids"], do_permutate)
-        print("After(input_ids) : ", batch['input_ids'].shape)
-        print("After(decoder_input_ids) : ", batch['decoder_input_ids'].shape)
         return batch
 
     def shift_tokens_right(self, inputs):
