@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from transformers import BartForConditionalGeneration
-
+import pdb
 class BARTforSeqRec(torch.nn.Module):
     def __init__(self, BARTforSeqRecConfig):
         super(BARTforSeqRec, self).__init__()
@@ -11,23 +11,26 @@ class BARTforSeqRec(torch.nn.Module):
     
     def forward(
         self,
-        user_ids,
-        seqs,
-        pos_seqs,
-        neg_seqs = None
+        input_ids = None,
+        decoder_ids = None,
+        labels = None,
+        neg_seqs = None,
+        user_ids = None
     ):
-        return self.BartForConditionalGeneration.forward(input_ids = seqs, labels = pos_seqs) 
+        return self.BartForConditionalGeneration.forward(input_ids = input_ids,
+                decoder_input_ids = decoder_ids,
+                labels = labels) 
     
     def predict(
         self,
-        user_ids,
-        seqs,
+        user_ids = None,
+        input_ids = None,
         candidate_items = None,
         top_N = 10
     ):
-        logits = self.BartForConditionalGeneration(seqs).logits
-
-        masked_index = (seqs[0] == self.mask_token_id).nonzero().item()
+        
+        logits = self.BartForConditionalGeneration(input_ids = input_ids).logits
+        masked_index = (input_ids[0] == self.mask_token_id).nonzero().item()
         probs = logits[0, masked_index].softmax(dim=0)
 
         values, predictions = probs.topk(top_N)
