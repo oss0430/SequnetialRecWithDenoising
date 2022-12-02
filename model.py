@@ -17,21 +17,20 @@ class BARTforSeqRec(torch.nn.Module):
         neg_seqs = None,
         user_ids = None
     ):
-        pdb.set_trace()
         return self.BartForConditionalGeneration.forward(input_ids = input_ids,
                 decoder_input_ids = decoder_ids,
                 labels = labels) 
     
     def predict(
         self,
-        user_ids,
-        seqs,
+        user_ids = None,
+        input_ids = None,
         candidate_items = None,
         top_N = 10
     ):
-        logits = self.BartForConditionalGeneration(seqs).logits
-
-        masked_index = (seqs[0] == self.mask_token_id).nonzero().item()
+        
+        logits = self.BartForConditionalGeneration(input_ids = input_ids).logits
+        masked_index = (input_ids[0] == self.mask_token_id).nonzero().item()
         probs = logits[0, masked_index].softmax(dim=0)
 
         values, predictions = probs.topk(top_N)
