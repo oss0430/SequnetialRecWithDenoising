@@ -96,13 +96,13 @@ class SeqRecDataset(Dataset):
 
     def _sequence_noising(
         self,
-        input_ids,
+        input_seq,
         mask_token_id,
         permutation_segment_token_id
     ):  
         ##TODO
         ## MAKE NOISING Function
-        noised_ids = input_ids
+        noised_ids = input_seq
         return noised_ids
 
 
@@ -165,7 +165,6 @@ class SeqRecDataset(Dataset):
         index
     ):
         user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
-        
         ## Add mask at the end of input sequence 
         input_sequence.append(self.item_mask_index)
         if len(input_sequence) > self.max_len:
