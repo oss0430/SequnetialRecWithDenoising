@@ -22,7 +22,8 @@ def train(
 ):
     model.train()
     total_loss = 0
-    for _,data in enumerate(loader, 0):
+    index = 0
+    for _ ,data in enumerate(loader, 0):
 
         #  user_ids     = data['user_id'].to(device) #user_id
         input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
@@ -47,9 +48,11 @@ def train(
         
         if _%500==0:
             print(f'Epoch: {epoch}, Loss:  {loss.item()}')
+        
+        index += 1
 
-    print(f"Epoch: {epoch}, Loss: {(total_loss / _)}")
-    return total_loss / _
+    print(f"Epoch: {epoch}, Loss: {(total_loss / index)}")
+    return total_loss / index
 
 def valid(
     epoch,
@@ -130,7 +133,7 @@ def main():
         'num_workers': 0
         }
     
-    torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.deterministic = True
 
     dfdataset  = pd.read_csv('data/beauty.csv')
     
@@ -144,7 +147,9 @@ def main():
     print(len(test_for_testing_dataset.sequences), test_for_testing_dataset.sequences[0]["sequence"])
     #train_for_validation_dataset = SeqRecDataset(dfdataset, is_train = True, for_testing = False)
     #test_for_validation_dataset  = SeqRecDataset(dfdataset, is_train = False, for_testing = False)
-    data_collator = DataCollatorForDenoisingTasks(mask_token_id = itemnum + 1,eos_token_id = itemnum + 3, bos_token_id = itemnum + 2)
+    data_collator = DataCollatorForDenoisingTasks(mask_ratio = 0.5, poisson_lambda = 3.0, permutate_sentence_ratio = 0.0, \
+        eos_token_id = itemnum + 3, bos_token_id = itemnum + 2, pad_token_id = 0, \
+            mask_token_id = itemnum + 1, pad_to_multiple_of = 16)
     train_for_testing_set_loader = DataLoader(train_for_testing_dataset, collate_fn=data_collator, **train_params)
     test_for_testing_set_loader  = DataLoader(test_for_testing_dataset,**val_params)
 
