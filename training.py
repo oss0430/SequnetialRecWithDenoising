@@ -13,7 +13,8 @@ from transformers import BartConfig, BartForConditionalGeneration
 from config import BARTforSeqRecConfig
 from model  import BARTforSeqRec
 import pdb
-def train(
+
+def pretrain(
     epoch,
     model,
     device,
@@ -28,9 +29,9 @@ def train(
         input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
         decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
         labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
-        #  positive_ids = data['positive_ids'].to(device)
-        #  negative_ids = data['negative_ids'].to(device)
-        outputs = model.forward(input_ids = input_ids, decoder_ids = decoder_ids, labels = labels)
+        outputs      = model.forward(input_ids = input_ids, 
+                                    decoder_ids = decoder_ids,
+                                    labels = labels)
         #print(outputs)
         loss = outputs[0]
         #logits = outputs.logits
@@ -48,7 +49,47 @@ def train(
         if _%500==0:
             print(f'Epoch: {epoch}, Loss:  {loss.item()}')
 
-    print(f"Epoch: {epoch}, Loss: {(total_loss / _)}")
+    print(f"traning end , Epoch: {epoch}, Loss: {(total_loss / _)}")
+    return total_loss / _
+
+
+
+def train(
+    epoch,
+    model,
+    device,
+    loader,
+    optimizer
+):
+    model.train()
+    total_loss = 0
+    for _,data in enumerate(loader, 0):
+
+        #  user_ids     = data['user_id'].to(device) #user_id
+        input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
+        #  decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
+        #  labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
+        positive_ids = data['positive_ids'].to(device)
+        #  negative_ids = data['negative_ids'].to(device)
+        outputs = model.forward(input_ids = input_ids, labels = positive_ids)
+        #print(outputs)
+        loss = outputs[0]
+        #logits = outputs.logits
+        #pred  = torch.argmax(F.softmax(logits,dim=1),dim=1)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        #correct = pred.eq(y)
+        #total_correct += correct.sum().item()
+        #total_len += len(labels)
+        total_loss += loss.item()
+        if _%10 == 0:
+            wandb.log({"Training Loss": loss.item()})
+        
+        if _%500==0:
+            print(f'Epoch: {epoch}, Loss:  {loss.item()}')
+
+    print(f"traning end , Epoch: {epoch}, Loss: {(total_loss / _)}")
     return total_loss / _
 
 def valid(
@@ -97,12 +138,14 @@ def main():
     config = wandb.config           # Initialize config
     config.TRAIN_BATCH_SIZE = 16    # input batch size for training (default: 64)
     config.VALID_BATCH_SIZE = 1     # input batch size for testing (default: 1)
-    config.TRAIN_EPOCHS =  1        # number of epochs to train (default: 10)
+    config.PRETRAIN_EPOCHS = 0       # numbert of epochs to pretrain (default: 10)
+    config.TRAIN_EPOCHS =  200       # number of epochs to train (default: 10)
     config.VAL_EPOCHS = 1  
     config.LEARNING_RATE = 4.00e-05 # learning rate (default: 0.01)
     config.SEED = 420               # random seed (default: 42)
-    config.MAX_LEN = 384
-
+    config.MAX_LEN = 101
+    config.SEGMENT_SEQ = True       #for permutation segment in pretrain
+    config.SEGMENT_LEN = 10         #segment length
     config.HIDDEN_DIM = [16, 32, 64, 128, 256, 512, 1024]  # hiddem dimension size (default: 1024)
     config.LAYER_NUM = 2                                   # number of layers (default: 12)
     config.HEAD_NUM = 2                                    # number of attention heads for each attention layer (default: 16)
@@ -130,18 +173,30 @@ def main():
     dfdataset  = pd.read_csv('data/beauty.csv')
     
     test_for_testing_dataset  = SeqRecDataset(dfdataset, is_train = False, for_testing = True, max_len= config.MAX_LEN)
-    train_for_testing_dataset = SeqRecDataset(dfdataset, is_train = True,  for_testing = True, max_len= config.MAX_LEN)
-
+    test_for_validation_dataset  = SeqRecDataset(dfdataset, is_train = False, for_testing = False)
+ 
+    train_for_testing_dataset = SeqRecDataset(dfdataset, is_train = True,  for_testing = True, max_len = config.MAX_LEN)
+    train_for_pretrain_dataset = SeqRecDataset(dfdataset, is_train = True, for_testing = True, max_len = config.MAX_LEN, 
+            segment_seq = config.SEGMENT_SEQ, segment_length = config.SEGMENT_LEN)
+    train_for_validation_dataset = SeqRecDataset(dfdataset, is_train = True, for_testing = False)
+    
     itemnum = test_for_testing_dataset.itemnum
     usernum = test_for_testing_dataset.usernum
 
     print(len(train_for_testing_dataset.sequences),train_for_testing_dataset.sequences[0]["sequence"])
     print(len(test_for_testing_dataset.sequences), test_for_testing_dataset.sequences[0]["sequence"])
-    #train_for_validation_dataset = SeqRecDataset(dfdataset, is_train = True, for_testing = False)
-    #test_for_validation_dataset  = SeqRecDataset(dfdataset, is_train = False, for_testing = False)
+    
     data_collator = DataCollatorForDenoisingTasks(mask_token_id = itemnum + 1,eos_token_id = itemnum + 3, bos_token_id = itemnum + 2)
-    train_for_testing_set_loader = DataLoader(train_for_testing_dataset, collate_fn=data_collator, **train_params)
+    
+    train_for_pretraining_set_loader = DataLoader(train_for_pretrain_dataset, collate_fn=data_collator, **train_params)
+    
+    train_for_testing_set_loader = DataLoader(train_for_testing_dataset, **train_params)
     test_for_testing_set_loader  = DataLoader(test_for_testing_dataset,**val_params)
+
+    train_for_valdation_set_loader = DataLoader(train_for_validation_dataset, **train_params)
+    test_for_valdation_set_loader  = DataLoader(test_for_validation_dataset, **val_params)
+
+
 
     ## 0 : padding_token_id
     ## itemnum + 1 : mask_token_id
@@ -165,13 +220,20 @@ def main():
     best_train_loss = 1000
     best_valid_ht, best_valid_ndcg = 0.0, 0.0
 
+    for epoch in range(config.PRETRAIN_EPOCHS):
+        train_loss = pretrain(epoch + 1, model, device, train_for_pretraining_set_loader, optimizer)
+
+        if train_loss < best_train_loss:
+            best_train_loss = train_loss
+            best_epoch = epoch
+
     for epoch in range(config.TRAIN_EPOCHS):
         train_loss = train(epoch + 1, model, device, train_for_testing_set_loader, optimizer)
 
         if train_loss < best_train_loss:
             best_train_loss = train_loss
             best_epoch = epoch
-            torch.save(model.state_dict(), 'trained_models/model.pt')
+
 
     for epoch in range(config.VAL_EPOCHS):
         hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_set_loader)
