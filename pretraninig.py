@@ -15,8 +15,20 @@ from utils import SeqRecDataset, DataCollatorForDenoisingTasks
 
 from transformers import BartConfig, BartForConditionalGeneration
 
-from config import BARTforSeqRecConfig
+from config import *
 from model  import BARTforSeqRec
+
+def set_seed(seed):
+    # torch.set_default_tensor_type('torch.FloatTensor')
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(DEVICE)
+        torch.cuda.manual_seed_all(seed)
+        # torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        use_cuda = True
 
 def train(
     epoch,
@@ -26,6 +38,8 @@ def train(
     optimizer
 ):
     model.train()
+    print("Start model pretraining....")
+
     total_loss = 0
     index = 0
 
@@ -58,36 +72,28 @@ def train(
 
 
 def main():
-    device = 'cuda' if cuda.is_available() else 'cpu'
+    args = get_args()
+    device = DEVICE
+
     wandb.init(project="BART SeqRec Pretraining results")
+    wandb.config.update(args)
 
-    config = wandb.config           # Initialize config
-    config.TRAIN_BATCH_SIZE = 16    # input batch size for training (default: 64)
-    config.TRAIN_EPOCHS =  2        # number of epochs to train (default: 10)
-    config.LEARNING_RATE = 4.00e-05 # learning rate (default: 0.01)
-    config.SEED = 420               # random seed (default: 42)
-    config.MAX_LEN = 384
-
-    config.HIDDEN_DIM = [16, 32, 64, 128, 256, 512, 1024]  # hiddem dimension size (default: 1024)
-    config.LAYER_NUM = 2                                   # number of layers (default: 12)
-    config.HEAD_NUM = 2                                    # number of attention heads for each attention layer (default: 16)
-    config.FFN_DIM = 32                                    # the dimensionality of each head (default: 4096)
+    set_seed(args.seed)
 
     train_params = {
-        'batch_size': config.TRAIN_BATCH_SIZE,
+        'batch_size': args.valid_batch_size,
         'shuffle': False,
         'num_workers': 0
         }
 
-    dfdataset  = pd.read_csv('data/beauty.csv')
-
-    train_for_testing_dataset = SeqRecDataset(dfdataset, is_train = True,  for_testing = True, max_len= config.MAX_LEN)
+    print("Start loading the data....")
+    train_for_testing_dataset = SeqRecDataset(DFDATASET, is_train = True,  for_testing = True, max_len=args.max_lengths)
 
     itemnum = train_for_testing_dataset.itemnum
 
-    data_collator = DataCollatorForDenoisingTasks(mask_ratio = 0.5, poisson_lambda = 3.0, permutate_sentence_ratio = 0.0, \
-        eos_token_id = itemnum + 3, bos_token_id = itemnum + 2, pad_token_id = 0, \
-            mask_token_id = itemnum + 1, pad_to_multiple_of = 16)
+    data_collator = DataCollatorForDenoisingTasks(mask_ratio = args.mask_ratio, poisson_lambda = args.poisson_lambda, \
+         permutate_sentence_ratio = args.permutate_sentence_ratio, eos_token_id = itemnum + 3, bos_token_id = itemnum + 2, \
+            pad_token_id = 0, mask_token_id = itemnum + 1, pad_to_multiple_of = 16)
     train_for_testing_loader_with_noise = DataLoader(train_for_testing_dataset, collate_fn=data_collator, **train_params)
 
     ## 0 : padding_token_id
@@ -98,17 +104,18 @@ def main():
 
     modelConfig = BARTforSeqRecConfig(vocab_size = item_embedding_size, \
         pad_token_id=0, bos_token_id= itemnum + 2, eos_token_id= itemnum + 3, mask_token_id= itemnum + 1, \
-            d_model = config.HIDDEN_DIM[2], encoder_layers = config.LAYER_NUM, decoder_layers = config.LAYER_NUM, \
-                encoder_attention_heads = config.HEAD_NUM, decoder_attention_heads = config.HEAD_NUM, decoder_ffn_dim = config.FFN_DIM, \
-                    encoder_ffn_dim = config.FFN_DIM, max_position_embeddings= config.MAX_LEN)
+            d_model = args.hidden_size, encoder_layers = args.num_encoder_layers, decoder_layers = args.num_decoder_layers, \
+                encoder_attention_heads = args.num_encoder_attention_heads, decoder_attention_heads = args.num_decoder_attention_heads, \
+                    decoder_ffn_dim = args.intermediate_size, encoder_ffn_dim = args.intermediate_size, max_position_embeddings= args.max_position_embeddings)
+    
     model = BARTforSeqRec(modelConfig)
     model.to(device)
 
-    optimizer = torch.optim.Adam(params =  model.parameters(), lr=config.LEARNING_RATE)
+    optimizer = torch.optim.Adam(params =  model.parameters(), lr=args.learning_rate)
 
     best_train_loss = 1000
 
-    for epoch in range(config.TRAIN_EPOCHS):
+    for epoch in range(args.train_num_epochs):
         train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
 
         if train_loss < best_train_loss:

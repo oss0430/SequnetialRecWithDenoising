@@ -10,9 +10,21 @@ from utils import SeqRecDataset, DataCollatorForDenoisingTasks
 
 from transformers import BartConfig, BartForConditionalGeneration
 
-from config import BARTforSeqRecConfig
+from config import *
 from model  import BARTforSeqRec
-import pdb
+
+def set_seed(seed):
+    # torch.set_default_tensor_type('torch.FloatTensor')
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.set_device(DEVICE)
+        torch.cuda.manual_seed_all(seed)
+        # torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        use_cuda = True
+
 def train(
     epoch,
     model,
@@ -21,17 +33,17 @@ def train(
     optimizer
 ):
     model.train()
+    print("Start model training....")
+
     total_loss = 0
     index = 0
     for _ ,data in enumerate(loader, 0):
-
-        #  user_ids     = data['user_id'].to(device) #user_id
-        input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
-        decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
-        labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
-        #  positive_ids = data['positive_ids'].to(device)
-        #  negative_ids = data['negative_ids'].to(device)
-        outputs = model.forward(input_ids = input_ids, decoder_ids = decoder_ids, labels = labels)
+        user_ids     = data['user_id'].to(device)
+        input_ids    = data['input_ids'].to(device)
+        positive_ids = data['positive_ids'].to(device)
+        negative_ids = data['negative_ids'].to(device)
+        
+        outputs = model.forward(user_ids = user_ids, input_ids = input_ids, labels = positive_ids)
         #print(outputs)
         loss = outputs[0]
         #logits = outputs.logits
@@ -61,6 +73,7 @@ def valid(
     loader
 ):  
     model.eval()
+    print("Start model testing....")
     
     ht   = np.array([0.0])
     ndcg = np.array([0.0])
@@ -94,42 +107,32 @@ def valid(
     return ht, ndcg
 
 def main():
-    device = 'cuda' if cuda.is_available() else 'cpu'
-    wandb.init(project="BART SeqRec results")
-    
-    config = wandb.config           # Initialize config
-    config.TRAIN_BATCH_SIZE = 16    # input batch size for training (default: 64)
-    config.VALID_BATCH_SIZE = 1     # input batch size for testing (default: 1)
-    config.TRAIN_EPOCHS =  1        # number of epochs to train (default: 10)
-    config.VAL_EPOCHS = 1  
-    config.LEARNING_RATE = 4.00e-05 # learning rate (default: 0.01)
-    config.SEED = 420               # random seed (default: 42)
-    config.MAX_LEN = 384
+    args = get_args()
+    device = DEVICE
 
-    config.HIDDEN_DIM = [16, 32, 64, 128, 256, 512, 1024]  # hiddem dimension size (default: 1024)
-    config.LAYER_NUM = 2                                   # number of layers (default: 12)
-    config.HEAD_NUM = 2                                    # number of attention heads for each attention layer (default: 16)
-    config.FFN_DIM = 32                                    # the dimensionality of each head (default: 4096)
+    wandb.init(project="BART SeqRec results")
+    wandb.config.update(args)
+
+    set_seed(args.seed)
 
     train_params = {
-        'batch_size': config.TRAIN_BATCH_SIZE,
+        'batch_size': args.train_batch_size,
         'shuffle': False,
         'num_workers': 0
         }
 
     ## Validation Batch size must be 1
     val_params = {
-        'batch_size': config.VALID_BATCH_SIZE,
+        'batch_size': args.valid_batch_size,
         'shuffle': False,
         'num_workers': 0
         }
     
     # torch.backends.cudnn.deterministic = True
-
-    dfdataset  = pd.read_csv('data/beauty.csv')
     
-    test_for_testing_dataset  = SeqRecDataset(dfdataset, is_train = False, for_testing = True, max_len= config.MAX_LEN)
-    train_for_testing_dataset = SeqRecDataset(dfdataset, is_train = True,  for_testing = True, max_len= config.MAX_LEN)
+    print("Start loading the data....")
+    test_for_testing_dataset  = SeqRecDataset(DFDATASET, is_train = False, for_testing = True, max_len=args.max_lengths)
+    train_for_testing_dataset = SeqRecDataset(DFDATASET, is_train = True,  for_testing = True, max_len=args.max_lengths)
 
     itemnum = test_for_testing_dataset.itemnum
     usernum = test_for_testing_dataset.usernum
@@ -146,24 +149,26 @@ def main():
     ## itemnum + 2 : bos_token 
     ## itemnum + 3 : eos_token 
     item_embedding_size = itemnum + 5
-    ## TODO:
-    ## Need to Match Parameters Number
-    ## Currently layer numbers are 12 for encoder 16 for decoder
-    ## While BERT4Recs are 2 layer
+
+    # BART model configuration
     modelConfig = BARTforSeqRecConfig(vocab_size = item_embedding_size, \
         pad_token_id=0, bos_token_id= itemnum + 2, eos_token_id= itemnum + 3, mask_token_id= itemnum + 1, \
-            d_model = config.HIDDEN_DIM[2], encoder_layers = config.LAYER_NUM, decoder_layers = config.LAYER_NUM, \
-                encoder_attention_heads = config.HEAD_NUM, decoder_attention_heads = config.HEAD_NUM, decoder_ffn_dim = config.FFN_DIM, \
-                    encoder_ffn_dim = config.FFN_DIM, max_position_embeddings= config.MAX_LEN)
+            d_model = args.hidden_size, encoder_layers = args.num_encoder_layers, decoder_layers = args.num_decoder_layers, \
+                encoder_attention_heads = args.num_encoder_attention_heads, decoder_attention_heads = args.num_decoder_attention_heads, \
+                    decoder_ffn_dim = args.intermediate_size, encoder_ffn_dim = args.intermediate_size, max_position_embeddings= args.max_position_embeddings)
+    
     model = BARTforSeqRec(modelConfig)
     model.to(device)
 
-    optimizer = torch.optim.Adam(params =  model.parameters(), lr=config.LEARNING_RATE)
+    # Pretrained model load
+    model.load_state_dict(torch.load('pretrained_models/model.pt'))
+
+    optimizer = torch.optim.Adam(params =  model.parameters(), lr=args.learning_rate)
 
     best_train_loss = 1000
     best_valid_ht, best_valid_ndcg = 0.0, 0.0
     
-    for epoch in range(config.TRAIN_EPOCHS):
+    for epoch in range(args.train_num_epochs):
         train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
 
         if train_loss < best_train_loss:
@@ -171,7 +176,7 @@ def main():
             best_epoch = epoch
             torch.save(model.state_dict(), 'trained_models/model.pt')
 
-    for epoch in range(config.VAL_EPOCHS):
+    for epoch in range(args.valid_num_epochs):
         model.load_state_dict(torch.load('trained_models/model.pt'))
         hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_loader)
 
