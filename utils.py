@@ -100,11 +100,14 @@ class SeqRecDataset(Dataset):
 
     def _sequence_noising(
         self,
-        ids
+        input_seq,
+        mask_token_id,
+        permutation_segment_token_id
     ):  
         ##TODO
         ## MAKE NOISING Function
-        return ids
+        noised_ids = input_seq
+        return noised_ids
 
 
     def _random_neq(
@@ -195,7 +198,6 @@ class SeqRecDataset(Dataset):
         index
     ):
         user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
-        
         ## Add mask at the end of input sequence 
         #input_sequence.append(self.item_mask_index)
 
@@ -229,13 +231,12 @@ class SeqRecTrainer():
 
     def _ht(
         self,
-        predictions,
-        target_item
+        predictions
     ):
         ht = 0.0
         rank = predictions.argsort().argsort()[0].item()
         if rank < 10:
-            HT += 1
+            ht += 1
         return ht
 
     def _ndcg(
@@ -274,24 +275,47 @@ class SeqRecTrainer():
 
         
 @dataclass
-class DataCollatorForDenoisingTasks:
+class DataCollatorForDenoisingTasks(object):
     """Data collator used denoising language modeling task in BART.
     The implementation is based on
     https://github.com/pytorch/fairseq/blob/1bba712622b8ae4efb3eb793a8a40da386fe11d0/fairseq/data/denoising_dataset.py.
     The default paramters is based on BART paper https://arxiv.org/abs/1910.13461.
     """
+
+    def __init__(
+        self,
+        mask_ratio: float,
+        poisson_lambda: float,
+        permutate_sentence_ratio: float,
+        eos_token_id: int,
+        bos_token_id: int,
+        pad_token_id: int,
+        mask_token_id: int,
+        pad_to_multiple_of: int
+    ):
+        self.mask_ratio = mask_ratio
+        self.poisson_lambda = poisson_lambda
+        self.permutate_sentence_ratio = permutate_sentence_ratio
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.mask_token_id = mask_token_id
+        self.pad_to_multiple_of = pad_to_multiple_of
+        
     
-    mask_ratio: float = 0.3
-    poisson_lambda: float = 3.0
-    permutate_sentence_ratio: float = 1.0
-    eos_token_id : int = 57289 + 3
-    bos_token_id : int = 57289 + 2
-    pad_token_id : int = 0
-    mask_token_id : int = 57289 + 1
-    pad_to_multiple_of: int = 16
+
+    # mask_ratio: float = 0.5
+    # poisson_lambda: float = 3.0
+    # permutate_sentence_ratio: float = 0.0
+    # eos_token_id : int = 57289 + 3
+    # bos_token_id : int = 57289 + 2
+    # pad_token_id : int = 0
+    # mask_token_id : int = 57289 + 1
+    # pad_to_multiple_of: int = 16
 
 
-    def __call__(self, examples: List[Dict[str, List[torch.tensor]]]) -> Dict[str, np.ndarray]:
+
+    def __call__(self, examples: List[Dict[str, List[torch.Tensor]]]) -> Dict[str, np.ndarray]:
         """Batching, adding whole word mask and permutate sentences
         Args:
             examples (dict): list of examples each examples contains input_ids field

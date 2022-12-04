@@ -79,11 +79,10 @@ class BARTforSeqRecWithBaseBart(torch.nn.Module):
     
     def forward(
         self,
+        user_ids = None,
         input_ids = None,
         decoder_ids = None,
-        labels = None,
-        neg_seqs = None,
-        user_ids = None
+        labels = None
     ):
         return self.bartBase.forward(
                 input_ids = input_ids,
