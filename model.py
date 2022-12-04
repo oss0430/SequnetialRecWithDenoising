@@ -11,11 +11,10 @@ class BARTforSeqRec(torch.nn.Module):
     
     def forward(
         self,
+        user_ids = None,
         input_ids = None,
         decoder_ids = None,
-        labels = None,
-        neg_seqs = None,
-        user_ids = None
+        labels = None
     ):
         return self.BartForConditionalGeneration.forward(input_ids = input_ids,
                 decoder_input_ids = decoder_ids,
