@@ -18,7 +18,9 @@ class SeqRecDataset(Dataset):
         dataframe, 
         is_train = True,
         for_testing = True,
-        max_len = 384
+        max_len = 101,
+        segment_seq = False,
+        segment_length = 5
     ):
         self.data          = dataframe
         self.review_user   = dataframe['user_id']
@@ -89,6 +91,8 @@ class SeqRecDataset(Dataset):
         self.item_mask_index = itemnum + 1
         self.max_len = max_len
 
+        self.segment_seq = segment_seq
+        self.segment_length = segment_length
 
     def __len__(self):
         return len(self.sequences)
@@ -119,6 +123,20 @@ class SeqRecDataset(Dataset):
             t = random.randint(l, r)
         return t
 
+    def _get_101_candidate_items(
+        self,
+        target_item
+    ):
+        candidate_item = []
+
+        candidate_item.append(target_item)
+        for _ in range(100):
+            item_id = random.randint(1,self.itemnum)
+            while target_item == item_id :
+                item_id = random.randint(1,self.itemnum)
+            candidate_item.append(item_id)
+
+        return candidate_item
 
     def _pad_and_trunc_by_max_len(
         self,
@@ -126,10 +144,23 @@ class SeqRecDataset(Dataset):
     ):
         ## sequence = [1] - [2] - [3]
         ## max_len  = 5
-        ## return   = [0] - [0] - [1] - [2] - [3] 
-        new_sequence =[self.bos_idx] + sequence + [self.eos_idx] + [self.padding_idx] * (self.max_len - len(sequence) - 2)
+        ## return   = [0] - [1] - [2] - [3] - [eos]
+        
+        ## if permutatin
+        ## seuence = [1] - [2] - [3] - [4] - [5]
+        ## segment_len = 2
+        ## return = [1]  - [2] - [eos]  - [3] - [4] - [eos] - [5] - [eos]
+        
+        
+        if self.segment_seq :
+            segment_length = self.segment_length
+            idx = [i for i in range(segment_length - 1, len(sequence) - 1, segment_length)]
+            sequence = np.insert(sequence, idx, self.eos_idx, axis = 0).tolist()
 
-        return new_sequence[:self.max_len]
+        #sequence = sequence + [self.eos_idx]
+        new_sequence = [self.padding_idx] * self.max_len + sequence
+
+        return new_sequence[len(new_sequence) - self.max_len :len(new_sequence)]
 
 
     def _sample_from_training_set_by_index(
@@ -156,8 +187,10 @@ class SeqRecDataset(Dataset):
         negative_sequence = []
         for _ in positive_sequence:
             negative_sequence.append(self._random_neq(1, self.itemnum, ts))
+        #candidate_item = self._get_101_candidate_items(target_item)
 
-        return user_id, input_sequence, positive_sequence, negative_sequence, target_item
+
+        return user_id, input_sequence, positive_sequence, negative_sequence, target_item#, candidate_item
 
 
     def __getitem__(
@@ -166,15 +199,15 @@ class SeqRecDataset(Dataset):
     ):
         user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
         ## Add mask at the end of input sequence 
-        input_sequence.append(self.item_mask_index)
-        if len(input_sequence) > self.max_len:
-            pdb.set_trace()
+        #input_sequence.append(self.item_mask_index)
 
         user_id         = np.array([user_id])
         input_ids       = np.array(self._pad_and_trunc_by_max_len(input_sequence))
         positive_ids    = np.array(self._pad_and_trunc_by_max_len(positive_sequence))
         negative_ids    = np.array(self._pad_and_trunc_by_max_len(negative_sequence))
-        target_item     = np.array([target_item])
+        target_item     = np.array(self._pad_and_trunc_by_max_len([target_item]))
+        #candidate_item  = np.array(candidate_item)
+        
         return {
             'user_id'        : user_id,
             'input_ids'      : input_ids,
@@ -270,6 +303,7 @@ class DataCollatorForDenoisingTasks(object):
         self.pad_to_multiple_of = pad_to_multiple_of
         
     
+
     # mask_ratio: float = 0.5
     # poisson_lambda: float = 3.0
     # permutate_sentence_ratio: float = 0.0
@@ -278,6 +312,7 @@ class DataCollatorForDenoisingTasks(object):
     # pad_token_id : int = 0
     # mask_token_id : int = 57289 + 1
     # pad_to_multiple_of: int = 16
+
 
 
     def __call__(self, examples: List[Dict[str, List[torch.Tensor]]]) -> Dict[str, np.ndarray]:
@@ -293,7 +328,6 @@ class DataCollatorForDenoisingTasks(object):
         do_permutate = False
         if self.permutate_sentence_ratio > 0.0:
             batch["input_ids"] = self.permutate_sentences(batch["input_ids"])
-            print(batch['input_ids'])
             do_permutate = True
 
         if self.mask_ratio:
@@ -332,7 +366,6 @@ class DataCollatorForDenoisingTasks(object):
     def permutate_sentences(self, inputs):
         results = inputs.copy()
         full_stops = inputs == self.eos_token_id
-
         sentence_ends = np.argwhere(full_stops[:, 1:] * ~full_stops[:, :-1])
         sentence_ends[:, 1] += 2
         num_sentences = np.unique(sentence_ends[:, 0], return_counts=True)[1]
@@ -351,6 +384,7 @@ class DataCollatorForDenoisingTasks(object):
                 sentence = inputs[i, (sentence_ends[i][j - 1] if j > 0 else 0) : sentence_ends[i][j]]
                 results[i, index : index + sentence.shape[0]] = sentence
                 index += sentence.shape[0]
+        
         return results
 
     def add_whole_word_mask(self, inputs, do_permutate):
