@@ -120,6 +120,20 @@ class SeqRecDataset(Dataset):
             t = random.randint(l, r)
         return t
 
+    def _get_101_candidate_items(
+        self,
+        target_item
+    ):
+        candidate_item = []
+
+        candidate_item.append(target_item)
+        for _ in range(100):
+            item_id = random.randint(1,self.itemnum)
+            while target_item == item_id :
+                item_id = random.randint(1,self.itemnum)
+            candidate_item.append(item_id)
+
+        return candidate_item
 
     def _pad_and_trunc_by_max_len(
         self,
@@ -140,7 +154,7 @@ class SeqRecDataset(Dataset):
             idx = [i for i in range(segment_length - 1, len(sequence) - 1, segment_length)]
             sequence = np.insert(sequence, idx, self.eos_idx, axis = 0).tolist()
 
-        sequence = sequence + [self.eos_idx]
+        #sequence = sequence + [self.eos_idx]
         new_sequence = [self.padding_idx] * self.max_len + sequence
 
         return new_sequence[len(new_sequence) - self.max_len :len(new_sequence)]
@@ -170,8 +184,10 @@ class SeqRecDataset(Dataset):
         negative_sequence = []
         for _ in positive_sequence:
             negative_sequence.append(self._random_neq(1, self.itemnum, ts))
+        #candidate_item = self._get_101_candidate_items(target_item)
 
-        return user_id, input_sequence, positive_sequence, negative_sequence, target_item
+
+        return user_id, input_sequence, positive_sequence, negative_sequence, target_item#, candidate_item
 
 
     def __getitem__(
@@ -181,13 +197,15 @@ class SeqRecDataset(Dataset):
         user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
         
         ## Add mask at the end of input sequence 
-        input_sequence.append(self.item_mask_index)
+        #input_sequence.append(self.item_mask_index)
 
         user_id         = np.array([user_id])
         input_ids       = np.array(self._pad_and_trunc_by_max_len(input_sequence))
         positive_ids    = np.array(self._pad_and_trunc_by_max_len(positive_sequence))
         negative_ids    = np.array(self._pad_and_trunc_by_max_len(negative_sequence))
-        target_item     = np.array([target_item])
+        target_item     = np.array(self._pad_and_trunc_by_max_len([target_item]))
+        #candidate_item  = np.array(candidate_item)
+        
         return {
             'user_id'        : user_id,
             'input_ids'      : input_ids,

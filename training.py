@@ -9,9 +9,9 @@ from torch import cuda
 from utils import SeqRecDataset, DataCollatorForDenoisingTasks
 
 from transformers import BartConfig, BartForConditionalGeneration
-
+from transformers import Trainer
 from config import BARTforSeqRecConfig
-from model  import BARTforSeqRec
+from model  import BARTforSeqRec, BARTforSeqRecWithBaseBart
 import pdb
 
 def pretrain(
@@ -27,10 +27,10 @@ def pretrain(
 
         #  user_ids     = data['user_id'].to(device) #user_id
         input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
-        decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
+        decoder_input_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
         labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
         outputs      = model.forward(input_ids = input_ids, 
-                                    decoder_ids = decoder_ids,
+                                    decoder_input_ids = decoder_input_ids,
                                     labels = labels)
         #print(outputs)
         loss = outputs[0]
@@ -67,11 +67,12 @@ def train(
 
         #  user_ids     = data['user_id'].to(device) #user_id
         input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
+        target_item    = torch.tensor(data['target_item']).to(device, dtype = torch.long)
         #  decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
         #  labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
-        positive_ids = data['positive_ids'].to(device)
+        #  positive_ids = data['positive_ids'].to(device)
         #  negative_ids = data['negative_ids'].to(device)
-        outputs = model.forward(input_ids = input_ids, labels = positive_ids)
+        outputs = model.forward(input_ids = input_ids, decoder_input_ids = target_item, labels = target_item)
         #print(outputs)
         loss = outputs[0]
         #logits = outputs.logits
@@ -96,40 +97,46 @@ def valid(
     epoch,
     model,
     device,
-    loader
+    loader,
+    usernum
 ):  
     model.eval()
     
     ht   = np.array([0.0])
     ndcg = np.array([0.0])
-    user_numbers = len(loader)
+    user_numbers = usernum
 
     for _,data in enumerate(loader, 0):
         #optimizer.zero_grad()
         
         user_ids     = data['user_id'].to(device)
         input_ids    = data['input_ids'].to(device)
-        #  decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long)
-        #  positive_ids = data['positive_ids'].to(device)
-        #  negative_ids = data['negative_ids'].to(device)
         target_item  = data['target_item'].to(device)
+
+        values, predictions, logits = model.new_predict(input_ids = input_ids, candidate_items = None, top_N = 10)
+
+
+        target_item_value = target_item[:,-1].view([-1,1])
+
+        nonzeros = (predictions == target_item_value).nonzero().to(torch.device("cpu")).numpy()
+        ranks = [-1] * len(target_item_value)
+        for nonzero_indices in nonzeros:
+            ranks[nonzero_indices[0]] = nonzero_indices[1]
         
-        values, predictions = model.predict(input_ids = input_ids, candidate_items = None, top_N = 10)
-        
-        rank = (predictions == target_item).nonzero(as_tuple=True)[0].to(torch.device("cpu")).numpy()
-        if len(rank) > 0:
-            #print(predictions, target_item, rank)
-            ht += 1
-            ndcg += np.log2(rank + 2)
-        else :
-            #print(predictions, target_item, rank)
-            ht += 0
-            ndcg += 0
+        for rank in ranks:
+            if rank == -1:
+                #print(values, predictions, target_item, "MISS")
+                ht += 0
+                ndcg += 0
+            else:
+                #print(values, predictions, target_item, "HIT")
+                ht += 1
+                ndcg += np.log2(rank + 2)
     
-    ht = ht / user_numbers
-    ndcg = ndcg / user_numbers
-    print("ht :" ,ht, " ndcg : ", ndcg)
-    return ht, ndcg
+    ht_average = ht / user_numbers
+    ndcg_average = ndcg / user_numbers
+    print("ht :" ,ht, " ndcg : ", ndcg, "average : ",ht_average,ndcg_average, "user_number : ", user_numbers )
+    return ht_average, ndcg_average
 
 def main():
     device = 'cuda' if cuda.is_available() else 'cpu'
@@ -137,13 +144,13 @@ def main():
     
     config = wandb.config           # Initialize config
     config.TRAIN_BATCH_SIZE = 16    # input batch size for training (default: 64)
-    config.VALID_BATCH_SIZE = 1     # input batch size for testing (default: 1)
+    config.VALID_BATCH_SIZE = 4     # input batch size for testing (default: 1)
     config.PRETRAIN_EPOCHS = 0       # numbert of epochs to pretrain (default: 10)
-    config.TRAIN_EPOCHS =  200       # number of epochs to train (default: 10)
+    config.TRAIN_EPOCHS =  5       # number of epochs to train (default: 10)
     config.VAL_EPOCHS = 1  
     config.LEARNING_RATE = 4.00e-05 # learning rate (default: 0.01)
     config.SEED = 420               # random seed (default: 42)
-    config.MAX_LEN = 101
+    config.MAX_LEN = 50
     config.SEGMENT_SEQ = True       #for permutation segment in pretrain
     config.SEGMENT_LEN = 10         #segment length
     config.HIDDEN_DIM = [16, 32, 64, 128, 256, 512, 1024]  # hiddem dimension size (default: 1024)
@@ -183,9 +190,9 @@ def main():
     itemnum = test_for_testing_dataset.itemnum
     usernum = test_for_testing_dataset.usernum
 
-    print(len(train_for_testing_dataset.sequences),train_for_testing_dataset.sequences[0]["sequence"])
-    print(len(test_for_testing_dataset.sequences), test_for_testing_dataset.sequences[0]["sequence"])
-    
+    print("Number of users in training", len(train_for_testing_dataset.sequences))
+    print("Number of users in testing",  len(test_for_testing_dataset.sequences))
+    print(usernum)
     data_collator = DataCollatorForDenoisingTasks(mask_token_id = itemnum + 1,eos_token_id = itemnum + 3, bos_token_id = itemnum + 2)
     
     train_for_pretraining_set_loader = DataLoader(train_for_pretrain_dataset, collate_fn=data_collator, **train_params)
@@ -236,7 +243,7 @@ def main():
 
 
     for epoch in range(config.VAL_EPOCHS):
-        hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_set_loader)
+        hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_set_loader, usernum)
 
         if hitratio > best_valid_ht and ndcg > best_valid_ndcg:
             best_valid_ht = hitratio
