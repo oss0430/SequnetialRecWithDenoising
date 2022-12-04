@@ -95,14 +95,14 @@ def valid(
 
         
         target_item_value = target_item[:,-1].view([-1,1])
-        print(target_item_value)
+        #print(target_item_value)
         nonzeros = (predictions == target_item_value).nonzero().to(torch.device("cpu")).numpy()
         
         ranks = [-1] * len(target_item_value)
         for nonzero_indices in nonzeros:
             ranks[nonzero_indices[0]] = nonzero_indices[1]
         
-        print(ranks)
+        #print(ranks)
         for rank in ranks:
             if rank == -1:
                 #print(values, predictions, target_item, "MISS")
