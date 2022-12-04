@@ -11,7 +11,7 @@ from utils import SeqRecDataset, DataCollatorForDenoisingTasks
 from transformers import BartConfig, BartForConditionalGeneration
 
 from transformers import Trainer
-from config import BARTforSeqRecConfig, get_args
+from config import *
 from model  import BARTforSeqRec, BARTforSeqRecWithBaseBart
 import pdb
 
@@ -26,46 +26,6 @@ def set_seed(seed):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         use_cuda = True 
- 
-def pretrain(
-
-    epoch,
-    model,
-    device,
-    loader,
-    optimizer
-):
-    model.train()
-    print("Start model training....")
-
-
-        #  user_ids     = data['user_id'].to(device) #user_id
-        input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
-        decoder_input_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
-        labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
-        outputs      = model.forward(input_ids = input_ids, 
-                                    decoder_input_ids = decoder_input_ids,
-                                    labels = labels)
-        #print(outputs)
-        loss = outputs[0]
-        #logits = outputs.logits
-        #pred  = torch.argmax(F.softmax(logits,dim=1),dim=1)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        #correct = pred.eq(y)
-        #total_correct += correct.sum().item()
-        #total_len += len(labels)
-        total_loss += loss.item()
-        if _%10 == 0:
-            wandb.log({"Training Loss": loss.item()})
-        
-        if _%500==0:
-            print(f'Epoch: {epoch}, Loss:  {loss.item()}')
-
-    print(f"traning end , Epoch: {epoch}, Loss: {(total_loss / _)}")
-    return total_loss / _
-
 
 
 def train(
@@ -104,8 +64,6 @@ def train(
         
         if _%500==0:
             print(f'Epoch: {epoch}, Loss:  {loss.item()}')
-        
-        index += 1
 
 
     print(f"traning end , Epoch: {epoch}, Loss: {(total_loss / _)}")
@@ -135,14 +93,16 @@ def valid(
 
         values, predictions, logits = model.new_predict(input_ids = input_ids, candidate_items = None, top_N = 10)
 
-
+        
         target_item_value = target_item[:,-1].view([-1,1])
-
+        print(target_item_value)
         nonzeros = (predictions == target_item_value).nonzero().to(torch.device("cpu")).numpy()
+        
         ranks = [-1] * len(target_item_value)
         for nonzero_indices in nonzeros:
             ranks[nonzero_indices[0]] = nonzero_indices[1]
         
+        print(ranks)
         for rank in ranks:
             if rank == -1:
                 #print(values, predictions, target_item, "MISS")
@@ -159,14 +119,15 @@ def valid(
     return ht_average, ndcg_average
 
 def main():
-
-    config.PRETRAIN_EPOCHS = 0       # numbert of epochs to pretrain (default: 10)
-    config.SEGMENT_SEQ = True       #for permutation segment in pretrain
-    config.SEGMENT_LEN = 10         #segment length
-
+    args = get_args()
 
     wandb.init(project="BART SeqRec results")
-    wandb.config.update(args)
+    #wandb.config.update(args)
+    device = DEVICE
+
+    wandb.config.PRETRAIN_EPOCHS = 0       # numbert of epochs to pretrain (default: 10)
+    wandb.config.SEGMENT_SEQ = True       #for permutation segment in pretrain
+    wandb.config.SEGMENT_LEN = 10         #segment length
 
     set_seed(args.seed)
 
@@ -218,14 +179,14 @@ def main():
     model.to(device)
 
     # Pretrained model load
-    model.load_state_dict(torch.load('pretrained_models/model.pt'))
+    # model.load_state_dict(torch.load('pretrained_models/model.pt'))
 
     optimizer = torch.optim.Adam(params =  model.parameters(), lr=args.learning_rate)
 
     best_train_loss = 1000
     best_valid_ht, best_valid_ndcg = 0.0, 0.0
     
-    for epoch in range(args.train_num_epochs):
+    for epoch in range(args.num_epochs):
         train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
 
 
@@ -235,7 +196,7 @@ def main():
 
 
     for epoch in range(args.valid_num_epochs):
-        model.load_state_dict(torch.load('trained_models/model.pt'))
+        # model.load_state_dict(torch.load('trained_models/model.pt'))
         hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_loader, usernum)
 
 
