@@ -5,3 +5,6 @@ data/raw/
 
 .vscode/
 nohup.out
+*.pkl
+*.pt
+*.ipynb
