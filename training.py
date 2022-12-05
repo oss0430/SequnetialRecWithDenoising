@@ -37,6 +37,9 @@ def train(
 ):
     model.train()
     total_loss = 0
+
+    #print(next(loader))
+
     for _,data in enumerate(loader, 0):
 
         #  user_ids     = data['user_id'].to(device) #user_id
@@ -47,7 +50,7 @@ def train(
         positive_ids = data['positive_ids'].to(device)
         #  negative_ids = data['negative_ids'].to(device)
         #print(input_ids, positive_ids)
-        outputs = model.forward(input_ids = input_ids, decoder_input_ids = positive_ids, labels = positive_ids)
+        outputs = model.forward(input_ids = input_ids, decoder_input_ids = None, labels = positive_ids)
 
         #print(outputs)
         loss = outputs[0]
@@ -81,6 +84,8 @@ def valid(
     model.eval()
     print("Start model testing....")
     
+    #print(next(loader))
+
     ht   = np.array([0.0])
     ndcg = np.array([0.0])
     user_numbers = usernum
@@ -134,7 +139,7 @@ def main():
     wandb.config.SEGMENT_SEQ = True       #for permutation segment in pretrain
     wandb.config.SEGMENT_LEN = 10         #segment length
 
-    is_valid = True
+    is_valid = False
 
     set_seed(args.seed)
 
