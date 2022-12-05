@@ -155,26 +155,27 @@ def main():
         pad_token_id=0, bos_token_id= itemnum + 2, eos_token_id= itemnum + 3, mask_token_id= itemnum + 1, \
             d_model = args.hidden_size, encoder_layers = args.num_encoder_layers, decoder_layers = args.num_decoder_layers, \
                 encoder_attention_heads = args.num_encoder_attention_heads, decoder_attention_heads = args.num_decoder_attention_heads, \
-                    decoder_ffn_dim = args.intermediate_size, encoder_ffn_dim = args.intermediate_size, max_position_embeddings= args.max_position_embeddings)
+                    decoder_ffn_dim = args.intermediate_size, encoder_ffn_dim = args.intermediate_size, max_position_embeddings= args.max_position_embeddings, \
+                        dropout=args.dropout, attention_dropout=args.attention_probs_dropout_prob, init_std=args.initializer_range)
     
     model = BARTforSeqRec(modelConfig)
     model.to(device)
 
     # Pretrained model load
-    model.load_state_dict(torch.load('pretrained_models/model.pt'))
+    # model.load_state_dict(torch.load('pretrained_models/model.pt'))
 
     optimizer = torch.optim.Adam(params =  model.parameters(), lr=args.learning_rate)
 
     best_train_loss = 1000
     best_valid_ht, best_valid_ndcg = 0.0, 0.0
     
-    for epoch in range(args.train_num_epochs):
-        train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
+    # for epoch in range(args.num_epochs):
+    #     train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
 
-        if train_loss < best_train_loss:
-            best_train_loss = train_loss
-            best_epoch = epoch
-            torch.save(model.state_dict(), 'trained_models/model.pt')
+    #     if train_loss < best_train_loss:
+    #         best_train_loss = train_loss
+    #         best_epoch = epoch
+    #         torch.save(model.state_dict(), 'trained_models/model.pt')
 
     for epoch in range(args.valid_num_epochs):
         model.load_state_dict(torch.load('trained_models/model.pt'))

@@ -167,8 +167,8 @@ class SeqRecDataset(Dataset):
         user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
         ## Add mask at the end of input sequence 
         input_sequence.append(self.item_mask_index)
-        if len(input_sequence) > self.max_len:
-            pdb.set_trace()
+        # if len(input_sequence) > self.max_len:
+        #     pdb.set_trace()
 
         user_id         = np.array([user_id])
         input_ids       = np.array(self._pad_and_trunc_by_max_len(input_sequence))

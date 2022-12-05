@@ -16,6 +16,7 @@ def get_args():
     parser.add_argument('-f', default='', type=str)
 
     # Architecture
+    parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--attention_probs_dropout_prob', type=float, default=0.2)
     parser.add_argument('--hidden_size', type=int, default=64)
     parser.add_argument('--intermediate_size', type=int, default=256)
@@ -25,6 +26,7 @@ def get_args():
     parser.add_argument('--num_decoder_attention_heads', type=int, default=2)
     parser.add_argument('--num_encoder_layers', type=int, default=2)
     parser.add_argument('--num_decoder_layers', type=int, default=2)
+    parser.add_argument('--initializer_range', type=float, default=0.02)
     
     # Training Setting
     parser.add_argument('--train_batch_size', type=int, default=32)
@@ -45,6 +47,9 @@ def get_args():
 
     # Logistics
     parser.add_argument('--seed', type=int, default=420)
+
+    args = parser.parse_args()
+    return args
 
 class BARTforSeqRecConfig(BartConfig):
     def __init__(
