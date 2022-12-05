@@ -164,7 +164,7 @@ class SeqRecDataset(Dataset):
         
         new_sequence = sequence + [self.padding_idx] * self.max_len 
 
-        return new_sequence[len(new_sequence) - self.max_len :len(new_sequence)]
+        return new_sequence[:self.max_len]
 
 
     def _sample_from_training_set_by_index(
