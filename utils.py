@@ -164,8 +164,35 @@ class SeqRecDataset(Dataset):
         
         new_sequence = sequence + [self.padding_idx] * self.max_len 
 
-        return new_sequence[len(new_sequence) - self.max_len :len(new_sequence)]
+        return new_sequence[:self.max_len]
 
+    def _pad_and_trunc_by_max_len_for_pos(
+        self,
+        sequence = []
+    ):
+        ## sequence = [1] - [2] - [3]
+        ## max_len  = 5
+        ## return   = [0] - [1] - [2] - [3] - [eos]
+        
+        ## if permutatin
+        ## seuence = [1] - [2] - [3] - [4] - [5]
+        ## segment_len = 2
+        ## return = [1]  - [2] - [eos]  - [3] - [4] - [eos] - [5] - [eos]
+        
+        
+        if self.segment_seq :
+            segment_length = self.segment_length
+            idx = [i for i in range(segment_length - 1, len(sequence) - 1, segment_length)]
+            sequence = np.insert(sequence, idx, self.eos_idx, axis = 0).tolist()
+
+        #sequence = sequence + [self.eos_idx]
+        ## NEW NOW item starts at first
+        if len(sequence) > self.max_len :
+            sequence = sequence[len(sequence):]
+        
+        new_sequence = sequence + [-100] * self.max_len 
+
+        return new_sequence[:self.max_len]
 
     def _sample_from_training_set_by_index(
         self,
@@ -210,7 +237,7 @@ class SeqRecDataset(Dataset):
 
         user_id         = np.array([user_id])
         input_ids       = np.array(self._pad_and_trunc_by_max_len(input_sequence))
-        positive_ids    = np.array(self._pad_and_trunc_by_max_len(positive_sequence))
+        positive_ids    = np.array(self._pad_and_trunc_by_max_len_for_pos(positive_sequence))
         negative_ids    = np.array(self._pad_and_trunc_by_max_len(negative_sequence))
         target_item     = np.array(self._pad_and_trunc_by_max_len([target_item]))
         #candidate_item  = np.array(candidate_item)

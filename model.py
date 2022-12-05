@@ -9,6 +9,7 @@ class BARTforSeqRec(torch.nn.Module):
         self.BartForConditionalGeneration = BartForConditionalGeneration(BARTforSeqRecConfig)
         self.mask_token_id = BARTforSeqRecConfig.mask_token_id
         self.item_embedding = self.BartForConditionalGeneration.model.shared
+        print("padding_idx:", self.item_embedding.padding_idx)
     
     def forward(
         self,
@@ -31,12 +32,19 @@ class BARTforSeqRec(torch.nn.Module):
     ):
         
         logits = self.BartForConditionalGeneration(input_ids = input_ids).logits
-        masked_index = (input_ids[0] == self.mask_token_id).nonzero().item()
-        probs = logits[:, masked_index].softmax(dim=0)
+    
+        masked_indexs = (input_ids == self.mask_token_id).nonzero()
+        
+        value_list = []
+        predictions_list = []
 
-        values, predictions = probs.topk(top_N)
-
-        return values, predictions
+        for indices in masked_indexs:
+            probs = logits[indices[0], indices[1], :].softmax(dim=0)
+            value, prediction  = probs.topk(top_N)
+            value_list.append(value)
+            predictions_list.append(prediction)
+        
+        return torch.cat(value_list), torch.cat(predictions_list)
 
     def new_predict(
         self,
@@ -104,3 +112,4 @@ class BARTforSeqRecWithBaseBart(torch.nn.Module):
         values, predictions = probs.topk(top_N)
 
         return values, predictions
+

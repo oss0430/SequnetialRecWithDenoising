@@ -39,15 +39,19 @@ def train(
     print("Start model Training....")
 
     total_loss = 0
+
+    #print(next(loader))
+
     for _,data in enumerate(loader, 0):
         #  user_ids     = data['user_id'].to(device) #user_id
         input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
-        target_item    = torch.tensor(data['target_item']).to(device, dtype = torch.long)
+        #  target_item    = torch.tensor(data['target_item']).to(device, dtype = torch.long)
         #  decoder_ids  = torch.tensor(data['decoder_input_ids']).to(device, dtype = torch.long) #decoder_seq
         #  labels       = torch.tensor(data['labels']).to(device, dtype = torch.long) #mask item labels
-        #  positive_ids = data['positive_ids'].to(device)
+        positive_ids = data['positive_ids'].to(device)
         #  negative_ids = data['negative_ids'].to(device)
-        outputs = model.forward(input_ids = input_ids, decoder_input_ids = target_item, labels = target_item)
+        #print(input_ids, positive_ids)
+        outputs = model.forward(input_ids = input_ids, decoder_input_ids = None, labels = positive_ids)
 
         #print(outputs)
         loss = outputs[0]
@@ -81,6 +85,8 @@ def valid(
     model.eval()
     print("Start model testing....")
     
+    #print(next(loader))
+
     ht   = np.array([0.0])
     ndcg = np.array([0.0])
     user_numbers = usernum
@@ -91,11 +97,16 @@ def valid(
         user_ids     = data['user_id'].to(device)
         input_ids    = data['input_ids'].to(device)
         target_item  = data['target_item'].to(device)
-
-        values, predictions, logits = model.new_predict(input_ids = input_ids, candidate_items = None, top_N = 10)
-
-        target_item_value = target_item[:,-1].view([-1,1])
+        target_item_value = target_item[:,0].view([-1,1])
         #print(target_item_value)
+        #print(input_ids)
+        
+        if len(input_ids.nonzero()) == 0:
+            continue
+        #values, predictions, logits = model.new_predict(input_ids = input_ids, candidate_items = None, top_N = 10)
+        
+        values, predictions = model.predict(input_ids = input_ids, candidate_items = None, top_N = 10)
+        
         nonzeros = (predictions == target_item_value).nonzero().to(torch.device("cpu")).numpy()
         
         ranks = [-1] * len(target_item_value)
@@ -105,13 +116,13 @@ def valid(
         #print(ranks)
         for rank in ranks:
             if rank == -1:
-                #print(values, predictions, target_item, "MISS")
+                #print(rank, values, predictions, target_item_value, "MISS")
                 ht += 0
                 ndcg += 0
             else:
-                #print(values, predictions, target_item, "HIT")
+                #print(rank, values, predictions, target_item_value, "HIT")
                 ht += 1
-                ndcg += np.log2(rank + 2)
+                ndcg += 1/np.log2(rank + 2)
     
     ht_average = ht / user_numbers
     ndcg_average = ndcg / user_numbers
@@ -128,6 +139,8 @@ def main():
     wandb.config.PRETRAIN_EPOCHS = 0       # numbert of epochs to pretrain (default: 10)
     wandb.config.SEGMENT_SEQ = True       #for permutation segment in pretrain
     wandb.config.SEGMENT_LEN = 10         #segment length
+
+    is_valid = False
 
     set_seed(args.seed)
 
@@ -187,15 +200,24 @@ def main():
     best_train_loss = 1000
     best_valid_ht, best_valid_ndcg = 0.0, 0.0
     
-    for epoch in range(args.num_epochs):
-        train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
-        if train_loss < best_train_loss:
-            best_train_loss = train_loss
-            best_epoch = epoch
+    if not is_valid:
+
+        for epoch in range(args.num_epochs):
+            train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
 
 
+            if train_loss < best_train_loss:
+                best_train_loss = train_loss
+                best_epoch = epoch
+
+        torch.save(model.state_dict(), 'trained_models/model.pt')
+        print("saving at [trained_models/model.pt]")
+
+    print("loading at [trained_models/model.pt]")
+    model.load_state_dict(torch.load('trained_models/model.pt'))
+    
     for epoch in range(args.valid_num_epochs):
-        # model.load_state_dict(torch.load('trained_models/model.pt'))
+        
         hitratio, ndcg = valid(epoch + 1, model, device, test_for_testing_loader, usernum)
 
 
