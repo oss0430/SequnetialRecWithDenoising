@@ -158,7 +158,11 @@ class SeqRecDataset(Dataset):
             sequence = np.insert(sequence, idx, self.eos_idx, axis = 0).tolist()
 
         #sequence = sequence + [self.eos_idx]
-        new_sequence = [self.padding_idx] * self.max_len + sequence
+        ## NEW NOW item starts at first
+        if len(sequence) > self.max_len :
+            sequence = sequence[len(sequence):]
+        
+        new_sequence = sequence + [self.padding_idx] * self.max_len 
 
         return new_sequence[len(new_sequence) - self.max_len :len(new_sequence)]
 
@@ -198,6 +202,7 @@ class SeqRecDataset(Dataset):
         index
     ):
         user_id, input_sequence, positive_sequence, negative_sequence, target_item = self._sample_from_training_set_by_index(index)
+        
         ## Add mask at the end of input sequence 
         input_sequence.append(self.item_mask_index)
         # if len(input_sequence) > self.max_len:
