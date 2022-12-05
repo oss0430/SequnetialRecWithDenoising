@@ -6,10 +6,10 @@ from torch import cuda
 from transformers import BartConfig
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-DEVICE = torch.device("cuda:0") if cuda.is_available() else torch.device("cpu")
+DEVICE = torch.device("cuda:0")
 
-data_path = 'data/beauty.csv'
-DFDATASET = pd.read_csv(data_path)
+DATA = 'data/beauty.csv'
+DFDATASET = pd.read_csv(DATA)
 
 def get_args():
     parser = argparse.ArgumentParser(description='BART4Rec with Amazon Beauty')
@@ -21,7 +21,7 @@ def get_args():
     parser.add_argument('--hidden_size', type=int, default=64)
     parser.add_argument('--intermediate_size', type=int, default=256)
     parser.add_argument('--max_position_embeddings', type=int, default=200)
-    parser.add_argument('--max_lengths', type=int, default=50)
+    parser.add_argument('--max_lengths', type=int, default=101)
     parser.add_argument('--num_encoder_attention_heads', type=int, default=2)
     parser.add_argument('--num_decoder_attention_heads', type=int, default=2)
     parser.add_argument('--num_encoder_layers', type=int, default=2)
@@ -32,13 +32,17 @@ def get_args():
     parser.add_argument('--train_batch_size', type=int, default=32)
     parser.add_argument('--valid_batch_size', type=int, default=1)
     parser.add_argument('--clip', type=float, default=0.8)
-    parser.add_argument('--learning_rate', type=float, default=5e-5)
-    parser.add_argument('--num_epochs', type=int, default=4)
+    parser.add_argument('--learning_rate', type=float, default=5e-3)
+    parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--valid_num_epochs', type=int, default=1)
     parser.add_argument('--when', type=int, default=20,
                         help='when to decay learning rate (default: 20)')
     parser.add_argument('--patience', type=int, default=20,
                         help='when to stop training if best never change')
+    parser.add_argument('--weight_decay', type=float, default=1e-4,
+                        help='L2 penalty factor of the Adam optimizer')
+    parser.add_argument('--optim', type=str, default='Adam',
+                        help='optimizer to use (default: Adam)')
 
     # Pretraining Setting
     parser.add_argument('--mask_ratio', type=float, default=0.5)
