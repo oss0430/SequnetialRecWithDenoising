@@ -36,9 +36,10 @@ def train(
     optimizer
 ):
     model.train()
+    print("Start model Training....")
+
     total_loss = 0
     for _,data in enumerate(loader, 0):
-
         #  user_ids     = data['user_id'].to(device) #user_id
         input_ids    = torch.tensor(data['input_ids']).to(device, dtype = torch.long) #item_seq
         target_item    = torch.tensor(data['target_item']).to(device, dtype = torch.long)
@@ -66,8 +67,8 @@ def train(
             print(f'Epoch: {epoch}, Loss:  {loss.item()}')
 
 
-    print(f"traning end , Epoch: {epoch}, Loss: {(total_loss / _)}")
-    return total_loss / _
+    print(f"traning end , Epoch: {epoch}, Loss: {(total_loss / len(loader))}")
+    return total_loss / len(loader)
 
 
 def valid(
@@ -93,7 +94,6 @@ def valid(
 
         values, predictions, logits = model.new_predict(input_ids = input_ids, candidate_items = None, top_N = 10)
 
-        
         target_item_value = target_item[:,-1].view([-1,1])
         #print(target_item_value)
         nonzeros = (predictions == target_item_value).nonzero().to(torch.device("cpu")).numpy()
@@ -122,7 +122,7 @@ def main():
     args = get_args()
 
     wandb.init(project="BART SeqRec results")
-    #wandb.config.update(args)
+    wandb.config.update(args)
     device = DEVICE
 
     wandb.config.PRETRAIN_EPOCHS = 0       # numbert of epochs to pretrain (default: 10)
@@ -187,10 +187,8 @@ def main():
     best_train_loss = 1000
     best_valid_ht, best_valid_ndcg = 0.0, 0.0
     
-    # for epoch in range(args.num_epochs):
-    #     train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
-
-
+    for epoch in range(args.num_epochs):
+        train_loss = train(epoch + 1, model, device, train_for_testing_loader_with_noise, optimizer)
         if train_loss < best_train_loss:
             best_train_loss = train_loss
             best_epoch = epoch
@@ -209,7 +207,7 @@ def main():
     
     print("=======================================")
     print("Best Model Result")
-    print("Epoch: {best_epoch}, Loss: {best_train_loss}, HitRatio: {best_valid_ht}, NDCG: {best_valid_ndcg}")
+    print("Epoch: ", best_epoch, ", Loss: ", best_train_loss, ", HitRatio: ", best_valid_ht, ", NDCG: ", best_valid_ndcg)
     print("=======================================")
     ## TODO:
     ##  Add saving model parameters functions 
