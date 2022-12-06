@@ -1,0 +1,1 @@
+python main.py --hidden_size 16 --intermediate_size 64 --train_batch_size 128

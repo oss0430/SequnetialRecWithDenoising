@@ -63,7 +63,7 @@ class Solver(object):
             self.model = model = BARTforSeqRec(self.model_config)
         
         if torch.cuda.is_available():
-            self.args.device = self.device = torch.device(DEVICE)
+            self.args.device = self.device = torch.device("cuda")
             model = model.to(self.device)
         else:
             self.device = torch.device("cpu")
@@ -84,6 +84,8 @@ class Solver(object):
         model = self.model
         optimizer = self.optimizer
         scheduler = self.scheduler
+        
+        print(self.device)
 
         def train(model, optimizer):
             epoch_loss = 0
@@ -92,7 +94,7 @@ class Solver(object):
             model.train()
             num_batches = self.args.n_train // self.args.train_batch_size
             start_time = time.time()
-
+            print(self.device)
             for i_batch, data in enumerate(self.train_loader, 0):
                 #  user_ids     = data['user_id'].to(device) #user_id
                 input_ids    = torch.tensor(data['input_ids']).to(self.device, dtype = torch.long) #item_seq
@@ -105,7 +107,7 @@ class Solver(object):
 
                 batch_size = input_ids.size(0)
 
-                outputs = model.forward(input_ids = input_ids, decoder_input_ids = positive_ids, labels = positive_ids)
+                outputs = model.forward(input_ids = input_ids, labels = positive_ids)
 
                 #print(outputs)
                 loss = outputs[0]
@@ -125,12 +127,12 @@ class Solver(object):
                 if i_batch%10 == 0:
                     wandb.log({"Training Loss": loss.item()})
                 
-                if i_batch%500==0:
+                if i_batch%10==0:
                     print('Epoch {:2d} | Batch {:3d}/{:3d} | Time/Batch(ms) {:5.2f} | Train Loss {:5.4f}'.
                         format(epoch, i_batch, proc_size, elapsed_time * 1000, avg_loss))
                     print(f'Epoch: {epoch}, Loss:  {loss.item()}')
         
-            return epoch_loss / self.args.num_epochs
+            return avg_loss
     
         def evaluate(model, test=False, top_N=10):
             model.eval()
@@ -158,7 +160,7 @@ class Solver(object):
                     batch_size = input_ids.size(0)
 
                     # values, predictions = model.predict(input_ids = input_ids, candidate_items = None, top_N = 10)
-                    outputs = model(input_ids=input_ids, decoder_input_ids=positive_ids, labels=positive_ids)
+                    outputs = model(input_ids=input_ids)
                     logits = outputs.logits
                     probs = logits[:, -1].softmax(dim=0)
                     values, predictions = probs.topk(top_N)
